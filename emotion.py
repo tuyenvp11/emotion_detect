@@ -11,7 +11,7 @@ from collections import Counter, deque
 # Tải mô hình phân loại khuôn mặt và phát hiện cảm xúc
 face_classifier = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
 classifier = load_model('emt_det.keras')
-class_labels = ['Giận dữ', 'Ghê sợ', 'Sợ hãi', 'Hạnh phúc', 'Bình thường', 'Buồn', 'Bất ngờ', 'Buồn ngủ']
+class_labels = ['Giận dữ', 'Ghê sợ', 'Bình thường', 'Hạnh phúc', 'Sợ hãi', 'Buồn', 'Bất ngờ', 'Buồn ngủ']
 
 # Tải font chữ để vẽ văn bản
 font = ImageFont.truetype("arial.ttf", 32)

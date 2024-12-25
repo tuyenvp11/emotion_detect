@@ -1,63 +1,65 @@
 import os
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
-
 import cv2
 import numpy as np
-from tensorflow.keras.models import load_model
-from keras_preprocessing.image import img_to_array
+from keras.preprocessing import image
+import warnings
+warnings.filterwarnings("ignore")
+from keras.preprocessing.image import load_img, img_to_array
+from keras.models import load_model
 from PIL import ImageFont, ImageDraw, Image
+import matplotlib.pyplot as plt
 
-# Tải mô hình phân loại khuôn mặt và phát hiện cảm xúc
-face_classifier = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-classifier = load_model('emotion.keras')
-class_labels = ['Giận dữ', 'Ghê sợ', 'Sợ hãi', 'Hạnh phúc', 'Bình thường', 'Buồn', 'Bất ngờ', 'Buồn ngủ']
-#class_labels = ['angry', 'disgust', 'fear', 'happy', 'neutral', 'sad', 'surprise']
+# load model
+model = load_model("emt_det.keras")
 
+face_haar_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+
+# Load font tiếng Việt
 # Tải font chữ để vẽ văn bản
 font = ImageFont.truetype("arial.ttf", 32)
 b, g, r, a = 0, 255, 0, 0
 
-# Bắt đầu quay video
 cap = cv2.VideoCapture(0)
 
 while True:
-    ret, frame = cap.read()
+    ret, test_img = cap.read()  # captures frame and returns boolean value and captured image
     if not ret:
+        continue
+    gray_img = cv2.cvtColor(test_img, cv2.COLOR_BGR2GRAY)
+
+    faces_detected = face_haar_cascade.detectMultiScale(gray_img, 1.32, 5)
+
+    for (x, y, w, h) in faces_detected:
+        cv2.rectangle(test_img, (x, y), (x + w, y + h), (255, 0, 0), thickness=7)
+        roi_gray = gray_img[y:y + h, x:x + w]  # cropping region of interest i.e. face area from image
+        roi_gray = cv2.resize(roi_gray, (224, 224))
+        img_pixels = image.img_to_array(roi_gray)
+        img_pixels = np.expand_dims(img_pixels, axis=0)
+        img_pixels /= 255
+
+        predictions = model.predict(img_pixels)
+
+        # find max indexed array
+        max_index = np.argmax(predictions)
+
+        # Emotions in Vietnamese
+        emotions = ('Giận dữ', 'Ghê sợ', 'Sợ hãi', 'Hạnh phúc', 'Buồn', 'Trung lập', 'Bất ngờ', 'Buồn ngủ')
+        predicted_emotion = emotions[max_index]
+
+        # Convert OpenCV image to PIL format
+        pil_img = Image.fromarray(cv2.cvtColor(test_img, cv2.COLOR_BGR2RGB))
+        draw = ImageDraw.Draw(pil_img)
+        draw.text((x, y - 30), predicted_emotion, font=font, fill=(0, 0, 255, 0))
+
+        # Convert PIL image back to OpenCV format
+        test_img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+
+    resized_img = cv2.resize(test_img, (1000, 700))
+    cv2.imshow('Phân tích cảm xúc khuôn mặt', resized_img)
+
+    if cv2.waitKey(10) == ord('q'):  # wait until 'q' key is pressed
         break
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    faces = face_classifier.detectMultiScale(gray, 1.32, 5)
 
-    for (x, y, w, h) in faces:
-        # Vẽ hình chữ nhật quanh khuôn mặt
-        cv2.rectangle(frame, (x, y), (x + w, y + h), (255, 0, 0), 2)
-
-        # Xử lý trước vùng khuôn mặt để phát hiện cảm xúc
-        roi_gray = gray[y:y + h, x:x + w]
-        roi_gray = cv2.resize(roi_gray, (224, 224), interpolation=cv2.INTER_AREA)  # Resize về 224x224
-        roi_color = cv2.cvtColor(roi_gray, cv2.COLOR_GRAY2RGB)  # Chuyển đổi thang độ xám sang RGB
-
-        # Chuẩn hóa và chuẩn bị cho đầu vào mô hình
-        roi = roi_color.astype('float32') / 255.0
-        roi = img_to_array(roi)
-        roi = np.expand_dims(roi, axis=0)  # Add batch dimension
-
-        # Dự đoán khuôn mặt
-        preds = classifier.predict(roi)[0]
-        label = class_labels[preds.argmax()]
-
-        # Chuyển đổi khung sang định dạng PIL để vẽ văn bản
-        img_pil = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-        draw = ImageDraw.Draw(img_pil)
-        draw.text((x, y - 10), label, font=font, fill=(b, g, r, a))
-        frame = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
-
-    # Hiển thị khung có nhãn cảm xúc
-    cv2.imshow('Emotion Detection', frame)
-
-    # Sử dụng q trên bàn phím để tắt chương trình
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
-
-# Release resources
 cap.release()
 cv2.destroyAllWindows()
